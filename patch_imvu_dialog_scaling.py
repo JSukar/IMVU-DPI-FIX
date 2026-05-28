@@ -76,9 +76,17 @@ def restore(library):
     return backup
 
 
-def build_source():
-    with open(SOURCE, "r", encoding="utf-8") as f:
-        text = f.read()
+def load_source_text(library):
+    if os.path.exists(SOURCE):
+        with open(SOURCE, "r", encoding="utf-8") as f:
+            return f.read()
+    with zipfile.ZipFile(library, "r") as zf:
+        if ZIP_SOURCE in zf.namelist():
+            return zf.read(ZIP_SOURCE).decode("utf-8")
+    return None
+
+
+def build_source(text):
 
     if PATCH_MARKER in text:
         raise RuntimeError("Source already contains patch marker.")
@@ -163,7 +171,14 @@ def main():
         print("Restored %s from %s" % (library, backup))
         return 0
 
-    patched_source = build_source()
+    source_text = load_source_text(library)
+    if source_text is None:
+        print(
+            "Skipping: neither %s nor %s is available in this IMVU build (bytecode-only archive)."
+            % (SOURCE, ZIP_SOURCE)
+        )
+        return 0
+    patched_source = build_source(source_text)
     backup = rewrite(library, patched_source)
     print("Patched HTMLDialog scaling in %s" % library)
     print("Backup: %s" % backup)

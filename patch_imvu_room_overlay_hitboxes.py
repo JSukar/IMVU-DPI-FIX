@@ -196,6 +196,11 @@ def main():
         return 0
 
     with zipfile.ZipFile(library, "r") as zf:
+        if GECKO_SOURCE not in zf.namelist():
+            print(
+                "Skipping: %s is not present in this IMVU build (bytecode-only archive)." % GECKO_SOURCE
+            )
+            return 0
         source = zf.read(GECKO_SOURCE).decode("utf-8")
     patched = patch_source(source)
     backup = "%s.bak-hitbox-%s" % (library, time.strftime("%Y%m%d-%H%M%S"))

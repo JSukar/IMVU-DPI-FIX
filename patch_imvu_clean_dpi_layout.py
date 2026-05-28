@@ -160,7 +160,8 @@ def find_baseline(library, explicit):
         return preferred
     candidates = sorted(glob.glob(library + ".bak-*"))
     if not candidates:
-        raise RuntimeError("No library.zip baseline backups found.")
+        # First-run fallback: patch directly from current library.zip.
+        return library
     return candidates[0]
 
 
@@ -187,9 +188,24 @@ def patch_layout_bytes(entry, data):
     return data
 
 
-def build_gecko_source():
-    with open(GECKO_SOURCE_PATH, "r", encoding="utf-8") as f:
-        text = f.read()
+def load_gecko_source_text(library, baseline):
+    if os.path.exists(GECKO_SOURCE_PATH):
+        with open(GECKO_SOURCE_PATH, "r", encoding="utf-8") as f:
+            return f.read()
+
+    for candidate in (baseline, library):
+        try:
+            with zipfile.ZipFile(candidate, "r") as zf:
+                return zf.read(ZIP_GECKO_SOURCE).decode("utf-8")
+        except Exception:
+            continue
+    return None
+
+
+def build_gecko_source(library, baseline):
+    text = load_gecko_source_text(library, baseline)
+    if text is None:
+        return None
 
     text = text.replace(
         "import inspect, logging, os, urllib, urlparse, imvu.program",
@@ -213,9 +229,8 @@ def build_gecko_source():
 
     for methodName, method in imvuCallHandlers.items():
 """
-    if text.count(decompiler_bug) != 1:
-        raise RuntimeError("Could not repair geckocontext getCallHandlers artifact.")
-    text = text.replace(decompiler_bug, decompiler_fix)
+    if text.count(decompiler_bug) == 1:
+        text = text.replace(decompiler_bug, decompiler_fix)
 
     stripped = text.rstrip()
     if stripped.endswith("\nreturn"):
@@ -234,22 +249,29 @@ def rewrite_from_baseline(library, baseline):
 
     fd, temp_path = tempfile.mkstemp(prefix="library.clean.", suffix=".zip", dir=os.path.dirname(library))
     os.close(fd)
-    gecko_source = build_gecko_source()
+    gecko_source = build_gecko_source(library, baseline)
+    gecko_enabled = gecko_source is not None
+    if not gecko_enabled:
+        print(
+            "Warning: %s not found in source or archive; applying layout-bytecode patch only."
+            % ZIP_GECKO_SOURCE
+        )
 
     try:
         with zipfile.ZipFile(baseline, "r") as zin:
             with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
                 for info in zin.infolist():
-                    if info.filename in (ZIP_GECKO_BYTECODE, ZIP_GECKO_SOURCE):
+                    if gecko_enabled and info.filename in (ZIP_GECKO_BYTECODE, ZIP_GECKO_SOURCE):
                         continue
                     data = zin.read(info.filename)
                     data = patch_layout_bytes(info.filename, data)
                     zout.writestr(info, data)
 
-                info = zipfile.ZipInfo(ZIP_GECKO_SOURCE, time.localtime(time.time())[:6])
-                info.compress_type = zipfile.ZIP_DEFLATED
-                info.external_attr = 0o644 << 16
-                zout.writestr(info, gecko_source)
+                if gecko_enabled:
+                    info = zipfile.ZipInfo(ZIP_GECKO_SOURCE, time.localtime(time.time())[:6])
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    info.external_attr = 0o644 << 16
+                    zout.writestr(info, gecko_source)
         os.chmod(library, 0o666)
         os.replace(temp_path, library)
     except Exception:
