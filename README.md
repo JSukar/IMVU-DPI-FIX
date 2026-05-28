@@ -1,5 +1,7 @@
 # IMVU Classic Sharp-DPI Fix Toolkit (Windows)
 
+> **Note:** This does not fully fix in-room UI behavior or notification issues yet. I did not finish those parts, so feel free to modify and extend this project to make it fully functional.
+
 Technical tooling for diagnosing and patching IMVU Classic DPI-scaling regressions on high-DPI displays (for example, 240 DPI / 250% scale).
 
 This repository focuses on **mechanical, reversible binary/source patching** of IMVU runtime assets (`library.zip` and `imvuContent.jar`) and **window-level instrumentation** to validate behavior before/after each patch.
