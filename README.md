@@ -330,3 +330,12 @@ When contributing patches, include:
 
 This project modifies local IMVU client assets for compatibility/debugging on high-DPI systems. Use at your own risk.  
 Back up your installation and verify changes in a non-critical environment before daily use.
+
+This project is not affiliated with, endorsed by, or sponsored by IMVU, Inc.  
+IMVU is a trademark of its respective owner.
+
+---
+
+## 11) License
+
+Licensed under the MIT License. See `LICENSE` for the full text.
