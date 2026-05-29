@@ -1,10 +1,90 @@
 # IMVU Classic Sharp-DPI Fix Toolkit (Windows)
 
+## First to Try: Windows-Level Scaling Fix
+
+Start with `fix_imvu_scaling.py` before using the internal patch scripts.
+
+This is the clean, safe compatibility fix. It does **not** patch IMVU's
+`library.zip`, `imvuContent.jar`, CSS, Gecko overlays, dialogs, room code,
+`_avatarwindow.pyd`, `SceneWindow.dll`, or any other IMVU client file. Instead,
+it asks Windows to run and size the IMVU window in a DPI mode that keeps the
+whole client in one coordinate system.
+
+Default command:
+
+```powershell
+python .\fix_imvu_scaling.py
+```
+
+Recommended persistent/watch mode while testing:
+
+```powershell
+python .\fix_imvu_scaling.py --watch
+```
+
+What the default `lowres` preset does:
+
+- Finds visible top-level `IMVUClient.exe` windows.
+- Sets IMVU's registry DPI preference to `Recommended`:
+  - `HKCU\Software\IMVU\dpiScaling`
+- Writes the per-user Windows compatibility DPI override for the resolved
+  `IMVUClient.exe` path:
+  - `HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers`
+  - value: `~ DPIUNAWARE`
+- Restores and resizes the IMVU window using the monitor DPI/work-area data.
+
+The important default is:
+
+```python
+if args.preset == "lowres":
+    args.compat_dpi = "system"
+```
+
+That maps to this Windows compatibility flag:
+
+```text
+~ DPIUNAWARE
+```
+
+In practical terms, Windows DPI-virtualizes IMVU. IMVU behaves as if it is
+running on the scaled desktop coordinate space instead of directly targeting a
+high-resolution physical panel such as `2880x1800` at `200%`/`250%` scale.
+Because Windows then scales the entire IMVU process as one surface, the rendered
+UI, mouse hit-testing, room tabs, room overlays, avatar cards, room cards, menus,
+and dialog positions are much more likely to stay aligned.
+
+The tradeoff is image quality. Since IMVU is effectively rendered at a lower
+logical resolution and then stretched by Windows, the client can look softer or
+blurrier than true high-DPI/sharp mode. This is expected. If the in-game
+resolution or UI sharpness is not good enough for your setup, use this script as
+the stable baseline first, then move on to the deeper patch scripts below.
+GPU-level sharpening can also help compensate for the softness without changing
+IMVU's internal files.
+
+Why this should be first:
+
+- `fix_imvu_scaling.py` is a Windows-level compatibility fix.
+- The other patch scripts are internal IMVU surgery.
+- Windows-level scaling keeps IMVU's mixed native/Python/Gecko/scene layers
+  together.
+- Internal patches can make individual surfaces sharper, but they can also cause
+  different layers to scale differently, which is what creates click drift,
+  offset overlays, broken avatar cards, room card mismatch, and modal/menu
+  alignment problems.
+
+Use the internal patch scripts only when the Windows-level fix works
+functionally but the lower-quality scaled output is not acceptable.
+
+---
+
 > **Note:** This does not fully fix in-room UI behavior or notification issues yet. I did not finish those parts, so feel free to modify and extend this project to make it fully functional (I got lazy).
 
 Technical tooling for diagnosing and patching IMVU Classic DPI-scaling regressions on high-DPI displays (for example, 240 DPI / 250% scale).
 
-This repository focuses on **mechanical, reversible binary/source patching** of IMVU runtime assets (`library.zip` and `imvuContent.jar`) and **window-level instrumentation** to validate behavior before/after each patch.
+This repository includes a safe **Windows compatibility scaling helper** plus
+more aggressive **mechanical, reversible binary/source patching** of IMVU
+runtime assets (`library.zip` and `imvuContent.jar`) and **window-level
+instrumentation** to validate behavior before/after each patch.
 
 ---
 
@@ -29,6 +109,9 @@ The scripts here treat these as **separate failure classes** and patch each clas
 
 ## 2) Repository Layout
 
+- `fix_imvu_scaling.py`
+  First-try Windows compatibility DPI fix. Does not patch IMVU files; writes
+  per-user DPI compatibility registry values and resizes/restores the window.
 - `imvu_dpi_runtime_probe.py`  
   Runtime window/DPI probe (JSONL).
 - `compare_imvu_probes.py`  
@@ -59,6 +142,10 @@ The scripts here treat these as **separate failure classes** and patch each clas
 
 ### Files modified by scripts
 
+- `fix_imvu_scaling.py` does not modify IMVU files. It can write per-user
+  registry values only:
+  - `HKCU\Software\IMVU\dpiScaling`
+  - `HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers`
 - `%APPDATA%\IMVUClient\library.zip`
 - `%APPDATA%\IMVUClient\ui\chrome\imvuContent.jar`
 - Registry keys (optional, for sharp-mode config):
@@ -265,6 +352,30 @@ python .\patch_imvu_white_line.py
 ---
 
 ## 6) Recommended End-to-End Runbook
+
+### 6.1 Safe first runbook
+
+1. Start IMVU normally.
+2. Run:
+   ```powershell
+   python .\fix_imvu_scaling.py
+   ```
+3. Close and reopen IMVU if the script changed the Windows compatibility DPI
+   override.
+4. If needed, keep the helper active while testing:
+   ```powershell
+   python .\fix_imvu_scaling.py --watch
+   ```
+5. Verify room tabs, overlays, avatar cards, room cards, menus, dialogs, and
+   click targets before applying any internal patch script.
+
+If the UI lines up and input works, this is the lowest-risk fix. Expect some
+blur/softness because Windows is scaling the final IMVU window output.
+
+If the effective in-game resolution is too low or the softness is unacceptable,
+continue with the deep patch runbook below.
+
+### 6.2 Deep patch runbook
 
 1. Close IMVU completely.
 2. Capture baseline probe in compatible mode.
